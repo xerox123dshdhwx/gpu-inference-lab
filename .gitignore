@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+# Terraform: state and plugins stay on your laptop (state can hold secrets)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+# Website build output
+node_modules/
+site/.next/
+site/out/
+# Secrets and local files
+.env
+*.pem
+# Large profiler traces
+results/profile/
