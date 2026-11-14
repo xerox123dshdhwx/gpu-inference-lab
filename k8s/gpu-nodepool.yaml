@@ -1,0 +1,48 @@
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: gpu
+spec:
+  amiSelectorTerms:
+    - alias: al2023@latest        # Karpenter picks the NVIDIA variant for GPU machines
+  role: gpu-lab
+  subnetSelectorTerms:
+    - tags:
+        kubernetes.io/role/elb: "1"   # the public subnets (the tag from step 4)
+  associatePublicIPAddress: true      # downloads go straight out, not through the NAT
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: gpu-lab
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 150Gi          # room for the engine images and the model
+        volumeType: gp3
+        deleteOnTermination: true
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: gpu
+spec:
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: gpu
+      requirements:
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["g6.xlarge"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]   # spot first, on-demand if none is free
+      taints:
+        - key: nvidia.com/gpu
+          effect: NoSchedule             # only pods that ask for a GPU land here
+  limits:
+    nvidia.com/gpu: 2                    # your quota: 8 vCPUs = 2 g6.xlarge
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m                 # remove an idle GPU machine after 5 minutes
