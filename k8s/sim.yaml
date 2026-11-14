@@ -1,0 +1,27 @@
+# --- Object 1: a Deployment, which keeps the fake vLLM running ---
+apiVersion: apps/v1          # Deployments are defined in the "apps" part of Kubernetes, version 1
+kind: Deployment             # the kind of object
+metadata: # information about the object itself
+  name: sim                  # its name, used in commands such as: kubectl get deployment sim
+spec: # what you want (everything indented below)
+  replicas: 1                # keep exactly 1 copy (1 pod) running
+  selector: # how the Deployment recognises its own pods:
+    matchLabels: { app: sim }  #   every pod carrying the label app=sim
+  template: # the model for each pod it creates
+    metadata:
+      labels: { app: sim }     # each pod gets the label app=sim (must match the selector above)
+    spec: # what runs inside the pod
+      containers: # the list of containers in the pod
+        - name: sim          # first (and only) container, named sim
+          image: ghcr.io/llm-d/llm-d-inference-sim:v1.2.0   # what to download and run: registry/name:tag
+          args: [ "--model", "google/gemma-4-E4B-it", "--port", "8000", "--max-model-len","8192" ]   # options given to the program
+          ports: [ { containerPort: 8000, name: http } ]   # the program listens on port 8000, named "http"
+---                          # end of the first object, start of the second
+# --- Object 2: a Service, a fixed address in front of the pod ---
+apiVersion: v1               # Services are in the core part of Kubernetes, version 1
+kind: Service
+metadata:
+  name: sim                  # the name other pods use as an address: http://sim
+spec:
+  selector: { app: sim }       # send traffic to the pods labelled app=sim
+  ports: [ { port: 8000, targetPort: 8000, name: http } ]   # port 8000 of the Service goes to port 8000 of the pod
