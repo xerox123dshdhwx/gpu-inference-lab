@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  labels: {app: vllm}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: vllm}
+  template:
+    metadata:
+      labels: {app: vllm, llm-d.ai/guide: optimized-baseline}
+    spec:
+      enableServiceLinks: false
+      tolerations:
+        - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.33.0          # replaced by your version just below
+          args:
+            - --model=google/gemma-4-E4B-it
+            - --served-model-name=google/gemma-4-E4B-it
+            - --max-model-len=16384
+            - --max-num-seqs=8
+            - --max-num-batched-tokens=1024
+            - --enable-chunked-prefill
+            - '--limit-mm-per-prompt={"image": 0, "audio": 0, "video": 0}'
+            - --enable-auto-tool-choice
+            - --tool-call-parser=gemma4
+          env:
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: HF_TOKEN}}
+          ports: [{containerPort: 8000, name: http}]
+          resources:
+            limits: {nvidia.com/gpu: 1}           # this line makes Karpenter start a GPU machine
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+            failureThreshold: 90                 # up to 15 minutes for the first model download
+          volumeMounts:
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+spec:
+  selector: {app: vllm}
+  ports: [{port: 8000, targetPort: 8000, name: http}]
