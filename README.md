@@ -13,7 +13,7 @@ We’re building a GPU inference service on **Amazon EKS in Paris**. We deployed
 [Editable Excalidraw file](docs/assets/experiment-map.excalidraw)
 
 1. **Deploy three engines and choose one for the service.** Each engine had its own Kubernetes Deployment and Service. We replayed the same conversations at loads from 1 to 64 users and measured when the first text or tool-call chunk arrived. The target was under one second for 90% of requests. SGLang sustained the highest tested load under target. We chose vLLM because it met the target at 16 users and is llm-d’s default model server. It can report which prompt prefixes each replica has cached, which matters when we test routing repeated helpdesk turns to a replica that can reuse them. [Engine comparison and decision](notes/08-engine-comparison.md) · [llm-d model servers](https://llm-d.ai/docs/architecture/model-servers)
-2. **Optimize vLLM on one GPU.** We’ll profile the baseline to find where requests spend their time as load rises. Then we’ll change one setting at a time and check how caching, quantization, batching and speculative decoding affect latency, capacity and tool-call accuracy. [vLLM baseline](notes/05-baseline.md)
+2. **Optimize vLLM on one GPU.** We’ll profile the baseline to find where requests spend their time as load rises. Then we’ll change one setting at a time and check how caching, quantization, batching and speculative decoding affect latency, capacity and tool-call accuracy. [vLLM baseline](notes/05-vllm-baseline.md)
 3. **Decide when to run the GPU.** The lab will measure the cost per million tokens at different utilization levels, compare self-hosting with Amazon Bedrock, and time how long a visitor waits when the service starts cold.
 
 ## System architecture
@@ -32,9 +32,11 @@ When a visitor clicks **Wake the demo**, the site will show startup progress unt
 
 | Stage | What the lab investigates | Reading |
 | :--- | :--- | :--- |
-| Engine deployment and selection | Build the agent workload, deploy three engines and use the measurements and serving requirements to choose one. | [Agent workload](notes/01-agent-workload.md) · [vLLM baseline](notes/05-baseline.md) · [Engine comparison](notes/08-engine-comparison.md) |
+| Agent workload | Define the multi-turn traffic and how tool calls are scored. | [Agent workload](notes/01-agent-workload.md) |
+| Single-GPU deployments | Serve Gemma on each engine and measure latency under load. | [vLLM baseline](notes/05-vllm-baseline.md) · [SGLang](notes/06-sglang.md) · [llama.cpp](notes/07-llamacpp.md) |
+| Engine selection | Choose an engine for the helpdesk service and the routing experiments. | [Engine comparison](notes/08-engine-comparison.md) |
 | vLLM optimization | Find the single-GPU bottleneck, then test prefix caching, FP8 weights and KV cache, batching, and speculative decoding. | Planned |
 | Operating the service | Compare cache-aware routing with round-robin on two replicas. Measure scale-to-zero, cold starts and recovery after a Spot interruption. | Planned |
 | Cost and public demo | Identify the utilization at which self-hosting pays off. Publish the evidence and let visitors try the deployment. | Planned |
 
-Each experiment note records the prediction, the measurement and the deployment decision it supports. [Browse the notes](notes/)
+[Browse all lab notes](notes/)
