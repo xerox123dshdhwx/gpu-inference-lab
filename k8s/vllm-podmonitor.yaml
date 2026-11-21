@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: vllm
+  labels: {release: monitoring}     # matches the Helm release name
+spec:
+  selector:
+    matchLabels: {app: vllm}
+  podMetricsEndpoints:
+    - {port: http, path: /metrics}

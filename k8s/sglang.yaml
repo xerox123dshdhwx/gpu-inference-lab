@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sglang
+  labels: {app: sglang}
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 1800
+  selector:
+    matchLabels: {app: sglang}
+  template:
+    metadata:
+      labels: {app: sglang}
+    spec:
+      tolerations:
+        - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+      containers:
+        - name: sglang
+          image: lmsysorg/sglang:latest          # its version is printed at startup: note it
+          command: ["python3", "-m", "sglang.launch_server"]
+          args:
+            - --model-path=google/gemma-4-E4B-it
+            - --served-model-name=google/gemma-4-E4B-it
+            - --host=0.0.0.0
+            - --port=8000
+            - --context-length=16384
+            - --tool-call-parser=gemma4
+            - --mem-fraction-static=0.80
+          env:
+            - name: HF_TOKEN
+              valueFrom: {secretKeyRef: {name: hf-token, key: HF_TOKEN}}
+          ports: [{containerPort: 8000, name: http}]
+          resources:
+            limits: {nvidia.com/gpu: 1}
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 10
+            failureThreshold: 90
+          volumeMounts:
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 4Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sglang
+spec:
+  selector: {app: sglang}
+  ports: [{port: 8000, targetPort: 8000, name: http}]

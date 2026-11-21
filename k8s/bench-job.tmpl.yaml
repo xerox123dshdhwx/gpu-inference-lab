@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bench
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bench
+          image: python:3.12-slim
+          workingDir: /work
+          env:
+            - {name: TARGET, value: "__TARGET__"}
+            - {name: RUN_NAME, value: "__RUN__"}
+            - {name: USERS, value: "__USERS__"}
+            - {name: DURATION, value: "__DURATION__"}
+            - {name: TOOLS, value: "__TOOLS__"}
+            - {name: QUALITY, value: "__QUALITY__"}
+            - {name: LAYOUT, value: "__LAYOUT__"}
+            - { name: TRACES, value: "/work/traces.json" }
+            - { name: EVAL_SET, value: "/evaldata/eval_set.jsonl" }
+          command: ["bash", "-ec"]
+          args:
+            - |
+              pip install -q openai
+              mkdir -p /results/$RUN_NAME
+              python replay.py $TARGET 4 60 /tmp/warmup.jsonl    # warm-up, not kept
+              for u in $USERS; do
+                python replay.py $TARGET $u $DURATION /results/$RUN_NAME/users_$u.jsonl
+              done
+              if [ "$QUALITY" = "on" ]; then
+                python tool_eval.py $TARGET > /results/$RUN_NAME/quality.txt
+              fi
+              echo DONE
+              sleep 1800    # keeps the pod alive so you can copy the results
+          volumeMounts:
+            - {name: code, mountPath: /work}
+            - {name: evaldata, mountPath: /evaldata}
+            - {name: results, mountPath: /results}
+      volumes:
+        - {name: code, configMap: {name: bench-code}}
+        - {name: evaldata, configMap: {name: bench-eval}}
+        - {name: results, emptyDir: {}}
