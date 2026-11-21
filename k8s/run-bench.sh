@@ -4,8 +4,13 @@ set -e
 RUN=$1; TARGET=$2
 USERS=${3:-"1 2 4 8 16 32 64"}; DURATION=${4:-180}
 TOOLS=${5:-on}; QUALITY=${6:-on}; LAYOUT=${7:-good}
-if [[ -e "results/$RUN" ]]; then
-    printf 'Results already exist at results/%s. Choose a new run name.\n' "$RUN" >&2
+if [[ $RUN == 'baseline (vLLM)' ]]; then RUN=baseline; fi
+results_dir="results/$RUN"
+if [[ $RUN == baseline && ! -e $results_dir ]]; then
+    results_dir='results/baseline (vLLM)'
+fi
+if [[ -e "$results_dir" ]]; then
+    printf 'Results already exist at %s. Choose a new run name.\n' "$results_dir" >&2
     exit 1
 fi
 kubectl delete job bench --ignore-not-found
@@ -16,6 +21,6 @@ sed -e "s|__RUN__|$RUN|" -e "s|__TARGET__|$TARGET|" -e "s|__USERS__|$USERS|" \
 echo "Benchmark $RUN running, this takes a while..."
 until kubectl logs job/bench 2>/dev/null | grep -q DONE; do sleep 30; done
 POD=$(kubectl get pods -l job-name=bench -o jsonpath='{.items[0].metadata.name}')
-kubectl cp "$POD:/results/$RUN" "results/$RUN"
+kubectl cp "$POD:/results/$RUN" "$results_dir"
 kubectl delete job bench
 uv run python analysis/summarize.py "$RUN"

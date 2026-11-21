@@ -1,13 +1,14 @@
 """Summarize one run: latency, throughput and errors per load level, plus a chart."""
 import re
 import sys
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import polars as pl
 
+from result_paths import results_directory
+
 name = sys.argv[1] if len(sys.argv) > 1 else "baseline"
-results_dir = Path("results") / name
+results_dir = results_directory(name)
 TARGET_MS = 1000  # your p90 TTFT target
 rows = []
 for path in results_dir.glob("users_*.jsonl"):
