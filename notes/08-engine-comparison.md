@@ -2,14 +2,15 @@
 
 ## Setup
 
-Both runs were recorded on November 21, 2026. They served `google/gemma-4-E4B-it` with a 16,384-token context on one NVIDIA L4 (`g6.xlarge`) in the `gpu-lab` EKS cluster in Paris.
+All three runs were recorded on November 21, 2026, on one NVIDIA L4 (`g6.xlarge`) in the `gpu-lab` EKS cluster in Paris. vLLM and SGLang served `google/gemma-4-E4B-it` with a 16,384-token context. llama.cpp served the Q8_0 GGUF build of the same model.
 
-Both used the same streamed agent workload with tool definitions enabled. The benchmark warmed up for 60 seconds with four users, then ran each of the seven load levels for 180 seconds. Each request had a 300-token output limit.
+All three used the same streamed agent workload with tool definitions enabled. The benchmark warmed up for 60 seconds with four users, then ran each of the seven load levels for 180 seconds. Each request had a 300-token output limit.
 
 - **vLLM** ran `vllm/vllm-openai:v0.33.0` with `--max-num-seqs=80`, `--max-num-batched-tokens=1024` and chunked prefill enabled.
 - **SGLang** ran `lmsysorg/sglang:latest` with `--mem-fraction-static=0.80` to make room for the KV cache at startup. SGLang chose its request concurrency automatically.
+- **llama.cpp** ran `ghcr.io/ggml-org/llama.cpp:server-cuda` (build `b12602-418fe97b5`) with `--reasoning off`, `--jinja`, `-ngl 999`, `-np 16` and `-c 131072`. [llama.cpp manifest](../k8s/llamacpp.yaml)
 
-Both deployments used the `gemma4` tool-call parser. Details are in the [vLLM manifest](../k8s/vllm.yaml) and the [SGLang manifest](../k8s/sglang.yaml).
+vLLM and SGLang used the `gemma4` tool-call parser. [vLLM manifest](../k8s/vllm.yaml) · [SGLang manifest](../k8s/sglang.yaml)
 
 ## Results
 
@@ -45,14 +46,30 @@ The benchmark estimates inter-token latency (ITL) from the mean interval between
 
 **Highest tested load under 1 s p90 TTFT** — 64 users, the top load in this sweep. [Raw results](../results/sglang/) · [p90 chart](../results/sglang/p90_ttft.png)
 
+### llama.cpp
+
+| Users | p50 TTFT (ms) | p90 TTFT (ms) | ITL (ms) | Chunks/s | Errors |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 110.32 | 120.96 | 24.31 | 13.81 | 0 |
+| 2 | 125.96 | 196.76 | 25.38 | 27.81 | 0 |
+| 4 | 183.77 | 302.60 | 33.15 | 45.09 | 0 |
+| 8 | 340.90 | 492.20 | 69.58 | 63.79 | 0 |
+| 16 | 571.20 | 788.37 | 126.82 | 75.97 | 0 |
+| 32 | 2,729.40 | 3,705.54 | 96.83 | 134.85 | 0 |
+| 64 | 11,732.82 | 12,947.98 | 97.50 | 139.75 | 0 |
+
+**Highest tested load under 1 s p90 TTFT** — 16 users. All 2,740 measured requests produced at least one text or tool-call chunk, so each TTFT measures observed output. [Raw results](../results/llamacpp/) · [p90 chart](../results/llamacpp/p90_ttft.png)
+
+In the earlier run with the default thinking setting, 1,053 of 1,222 requests produced no counted output. Replaying one of those prompts showed that reasoning exhausted its 300-token budget. With thinking disabled, the same prompt returned text in 27 tokens. [Replay code](../workload/replay.py)
+
 ### Tool calls
 
-vLLM scored **65% exact match (130/200)** in the separate quality evaluation. The SGLang smoke test returned a structured `get_weather` call with `{"city":"Paris"}`. The 200-case evaluation ran on vLLM. [vLLM quality result](../results/baseline/quality.txt)
+vLLM scored **65% exact match (130/200)** in the separate quality evaluation. The SGLang smoke test returned a structured `get_weather` call with `{"city":"Paris"}`. The 200-case evaluation ran on vLLM, and the llama.cpp run had it disabled. [vLLM quality result](../results/baseline/quality.txt)
 
 ## Findings
 
-vLLM had lower p90 TTFT from one to eight users. SGLang had lower p90 TTFT at 16, 32 and 64 users. At 64 users, SGLang started responding in 264 ms at p90 and vLLM took 8.84 s. At that load, the measured median streaming chunk interval was 97.21 ms for SGLang and 72.64 ms for vLLM.
+vLLM had the lowest p90 TTFT from one to eight users. SGLang had the lowest p90 TTFT at 16, 32 and 64 users. At 64 users, p90 TTFT was 264 ms for SGLang, 8.84 s for vLLM and 12.95 s for llama.cpp. At that load, the median streaming chunk interval was 97.21 ms for SGLang, 72.64 ms for vLLM and 97.50 ms for llama.cpp.
 
 ## Limits
 
-The measurements describe these two configurations on one L4. They include the effects of the vLLM batch token budget and the SGLang memory allocation. The exact SGLang build and startup KV cache sizes were unavailable in the saved run artifacts.
+The measurements describe these configurations on one L4, including the vLLM batch token budget, the SGLang memory allocation and the llama.cpp GGUF quantization and slot settings. The exact SGLang build and startup KV cache sizes were unavailable in the saved run artifacts.
