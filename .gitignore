@@ -14,5 +14,6 @@ site/out/
 .env
 *.pem
 /gpu inference study plan/
-# Large profiler traces
-results/profile/
+# Keep raw profiler output local and publish the figures used in notes
+results/profile/*
+!results/profile/*.png
